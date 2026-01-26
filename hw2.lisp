@@ -1,9 +1,9 @@
 (in-package "ACL2S")
 
-;; (modeling-validate-defs)
+(modeling-validate-defs)
 ;; (modeling-admit-defs)
 ;; (modeling-admit-all)
-(modeling-start)
+;; (modeling-start)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; 1) SYNTAX: operators + SAEL expressions
@@ -53,7 +53,6 @@
             (lookup v (rest a))))))
 
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; 3) ERRORS + RESULTS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -66,6 +65,13 @@
 ;; Convenience predicate: true iff value is not error
 (definec no-errorp (x :rat-err) :boolean
   (not (equal x *er*)))
+
+;; added for (modeling-admit-all )
+(defthm no-errorp->rational
+    (implies (and (rat-errp v)
+                  (no-errorp v))
+             (rationalp v)))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; 4) SEMANTICS: evaluator saeval
@@ -149,11 +155,9 @@
 
 ;; 5) (0 ^ x) = 0 for saexpr x
 (property (x :saexpr a :assignment)
-          (let ((valueX (saeval x a)))
-
-            (=> (and (no-errorp valueX)
-                     (integerp valueX)
-                     (>= valueX 1))
+          (let ((n (saeval x a)))
+            (=> (and (integerp n)
+                     (> n 0))
                 (== (saeval (list 0 '^ x) a)
                     0))))
 
@@ -214,31 +218,23 @@
   (cond
     ((rationalp e) e)
     ((varp e) e)
-
     ;; unary
-    ((and (consp e) (equal (len e) 2) (eq (car e) '-))
-     (list '- (aa->sael (cadr e))))
-
-    ((and (consp e) (equal (len e) 2) (eq (car e) '/))
-     (list '/ (aa->sael (cadr e))))
-
+    ((and (consp e) (equal (len e) 2) (eq (first e) '-))
+     (list '- (aa->sael (first (rest e)))))
+    ((and (consp e) (equal (len e) 2) (eq (first e) '/))
+     (list '/ (aa->sael (first (rest e)))))
     ;; binary: (+ x y), (- x y), (* x y), (/ x y)
-    ((and (consp e) (equal (len e) 3) (eq (car e) '+))
-     (list (aa->sael (cadr e)) '+ (aa->sael (caddr e))))
-
-    ((and (consp e) (equal (len e) 3) (eq (car e) '-))
-     (list (aa->sael (cadr e)) '- (aa->sael (caddr e))))
-
-    ((and (consp e) (equal (len e) 3) (eq (car e) '*))
-     (list (aa->sael (cadr e)) '* (aa->sael (caddr e))))
-
-    ((and (consp e) (equal (len e) 3) (eq (car e) '/))
-     (list (aa->sael (cadr e)) '/ (aa->sael (caddr e))))
-
+    ((and (consp e) (equal (len e) 3) (eq (first e) '+))
+     (list (aa->sael (first (rest e))) '+ (aa->sael (first (rest (rest e))))))
+    ((and (consp e) (equal (len e) 3) (eq (first e) '-))
+     (list (aa->sael (first (rest e))) '- (aa->sael (first (rest (rest e))))))
+    ((and (consp e) (equal (len e) 3) (eq (first e) '*))
+     (list (aa->sael (first (rest e))) '* (aa->sael (first (rest (rest e))))))
+    ((and (consp e) (equal (len e) 3) (eq (first e) '/))
+     (list (aa->sael (first (rest e))) '/ (aa->sael (first (rest (rest e))))))
     ;; exponent: (expt x y)
-    ((and (consp e) (equal (len e) 3) (eq (car e) 'expt))
-     (list (aa->sael (cadr e)) '^ (aa->sael (caddr e))))
-
+    ((and (consp e) (equal (len e) 3) (eq (first e) 'expt))
+     (list (aa->sael (first (rest e))) '^ (aa->sael (first (rest (rest e))))))
     (t
      ;; should be unreachable if e :aaexpr
      'x)))
@@ -254,51 +250,74 @@
               x))
 
 ;; evaluates an aaexpr to a rational
+;; had the same issue as aa->sael because the match had unused variables. I decided to try to use the case-match instead
+;; to work with it.
 (definec aaeval (e :aaexpr a :assignment) :rational
-  (match e
-         (:rational e)
-         (:var (lookup e a))
+  (cond
+    ((rationalp e) e)
+    ((varp e) (lookup e a))
 
-         ;; unary minus
-         ((list '- x)
-          (- (aaeval x a)))
+    (t
+     (case-match e
 
-         ;; unary reciprocal: division-by-0 => 0
-         ((list '/ x)
-          (let ((vx (aaeval x a)))
-            (if (equal vx 0) 0 (/ 1 vx))))
+       ;; unary minus: (- x)
+       (('- x)
+        (- (aaeval x a)))
 
-         ;; binary ops
-         ((list '+ x y)
-          (+ (aaeval x a) (aaeval y a)))
+       ;; unary reciprocal: (/ x)  div-by-0 => 0
+       (('/ x)
+        (let ((valueX (aaeval x a)))
+          (if (equal valueX 0) 0 (/ 1 valueX))))
 
-         ((list '- x y)
-          (- (aaeval x a) (aaeval y a)))
+       ;; binary +
+       (('+ x y)
+        (+ (aaeval x a) (aaeval y a)))
 
-         ((list '* x y)
-          (* (aaeval x a) (aaeval y a)))
+       ;; binary -
+       (('- x y)
+        (- (aaeval x a) (aaeval y a)))
 
-         ;; division-by-0 => 0
-         ((list '/ x y)
-          (let ((vy (aaeval y a)))
-            (if (equal vy 0) 0 (/ (aaeval x a) vy))))
+       ;; binary *
+       (('* x y)
+        (* (aaeval x a) (aaeval y a)))
 
-         ;; expt special cases
-         ((list 'expt x y)
-          (let ((vx (aaeval x a))
-                (vy (aaeval y a)))
-            (if (or (equal vy 0) (not (integerp vy)))
-                1
-                (if (equal vx 0)
-                    0
-                    (expt vx vy)))))))
+       ;; binary /  div-by-0 => 0
+       (('/ x y)
+        (let ((valueY (aaeval y a)))
+          (if (equal valueY 0)
+              0
+            (/ (aaeval x a) valueY))))
+
+       ;; (expt x y) special cases:
+       ;; if y=0 or y not integer => 1
+       ;; else if x=0 => 0
+       ;; else (expt x y)
+       (('expt x y)
+        (let ((valueX (aaeval x a))
+              (valueY (aaeval y a)))
+          (if (or (equal valueY 0) (not (integerp valueY)))
+              1
+            (if (equal valueX 0)
+                0
+              (expt valueX valueY)))))
+
+       ;; should be unreachable if e :aaexpr, but totality fallback
+       (& 0)))))
 
 
+;; Test some properties here
+;; Only time saexpr should deviate is when there is an error (aaexpr always returns a rational)
+
+;; sael -> aael
+(property (e :saexpr a :assignment)
+          (=> (no-errorp (saeval e a))
+              (== (aaeval (sael->aa e) a)
+                  (saeval e a))))
+
+;; aael -> sael
+(property (e :aaexpr a :assignment)
+          (=> (no-errorp (saeval (aa->sael e) a))
+              (== (aaeval e a)
+                  (saeval (aa->sael e) a))))
 
 
-
-
-;; TODO: sael->aa, aa->sael
-;; TODO: inverse properties
-;; TODO: aaeval
-;; TODO: correspondence properties
