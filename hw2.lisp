@@ -1,3 +1,28 @@
+#|
+
+Copyright © 2026 by Pete Manolios 
+CS 4820 Spring 2026
+
+Homework 2.
+Due: 1/26 (Midnight)
+
+For this assignment, work in groups of 1-2.
+
+Send me a link to your repo and cc the grader and your group members.
+Send only 1 email per group and make sure to follow the submission
+instructions on the course Web page. In particular, make sure that
+the subject of your email submission is "CS 4820 HWK 2". Also, your
+repo should have this file in it with solutions/answers included.
+
+The group members are:
+Zheng wangyuan 
+
+|#
+
+
+
+
+
 (in-package "ACL2S")
 
 (modeling-validate-defs)
