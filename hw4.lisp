@@ -137,7 +137,7 @@ Q1. Consider the following definition
 ; properties.  Make sure that ACL2s can prove all of these
 ; properties. When you increase the configuration for gradual
 ; verification to the final setting, ACL2s will require proofs. You
-; can (and should) prove lemmas as needed. 
+; can (and should) prove lemmas as needed.
 
 ; Q1c
 ; this is for the swap case (& nil)
@@ -152,7 +152,7 @@ Q1. Consider the following definition
               (< (m-bad-app x (rest y) (cons (first y) acc))
                  (m-bad-app x y acc))))
 (property (x y :tl acc :all)
-          (=> (and (consp x) (consp y) (tlp acc))
+          (=> (and (consp x) (consp y))
               (and
                ; inner call decreases
                (< (m-bad-app acc nil y)
@@ -167,8 +167,12 @@ Q1. Consider the following definition
 
 ; Q1d
 (property (x y :tl)
-  (== (bad-app x y nil)
-      ...))
+          (== (bad-app x y nil)
+              (if (endp x)
+                  (rev y)
+                  (if (endp y)
+                      (rev x)
+                      (app (rev x) y)))))
 
 ; Configuration: update as per instructions
 (modeling-start)
@@ -190,29 +194,45 @@ Q2. Consider the following definition.
 
  ACL2s accepts the definition, but your job is to come up with a
  measure function and ACL2s proofs of the corresponding proof
- obligations. 
+ obligations.
 
 |#
 
 ; Define, m-ack, a measure function for ack.
-; Q2a. We are using the definition on page ...
+; Q2a. We are using the definition on page 129
 
 ; Note: fill in the ...'s above, as you can use the generalized
 ; measure functions, as mentioned in Section 5.5.
 
 ; Q2b. Fill in the definition
-(definec m-ack (...) ...
-  ...)
 
+(definec m-ack (n m :nat) :lex
+  (list n m))
 ; The proof obligations for the termination proof of ack, using
 ; properties.  Make sure that ACL2s can prove all of these
-; properties. 
+; properties.
 
 ; Q2c
-(property ...)
-(property ...)
-(property ...)
-  
+; Case m = 0: (n,m) -> (n-1, 1)
+(property (n m :nat)
+          (=> (and (not (zp n))
+                   (zp m))
+              (l< (m-ack (1- n) 1)
+                  (m-ack n m))))
+
+; Inner call when n>0,m>0: (n,m) -> (n, m-1)
+(property (n m :nat)
+          (=> (and (not (zp n))
+                   (not (zp m)))
+              (l< (m-ack n (1- m))
+                  (m-ack n m))))
+
+; Outer call when n>0,m>0: (n,m) -> (n-1, ack(n,m-1))
+(property (n m :nat)
+          (=> (and (not (zp n))
+                   (not (zp m)))
+              (l< (m-ack (1- n) (ack n (1- m)))
+                  (m-ack n m))))
 ; Configuration: update as per instructions
 (modeling-start)
 
@@ -270,20 +290,49 @@ Q3. Consider the following definitions.
 
 
 ; Q3b. Fill in the definition. This definition must be accepted by
-; ACL2s. 
-(definec m-if-flat (...) ...
-  ...)
+; ACL2s.
+
+; Helper: Count if-expressions appearing in condition positions
+(definec count-cond-ifs (x :if-expr) :nat
+  (match x
+         (:if-atom 0)
+         (('if a b c)
+          (if (if-atomp a)
+              (+ (count-cond-ifs b) (count-cond-ifs c))
+                                        ; a must be (if d e f) - use second, third, fourth to extract
+              (+ 1 
+                 (count-cond-ifs (second a))
+                 (count-cond-ifs (third a))
+                 (count-cond-ifs (fourth a))
+                 (count-cond-ifs b)
+                 (count-cond-ifs c))))))
+
+; Measure function returning lexicographic ordering
+(definec m-if-flat (x :if-expr) :lex
+  (list (count-cond-ifs x) (cons-size x)))
 
 ; The proof obligations for the termination proof of if-flat, using
 ; properties.  Make sure that ACL2s can prove all of these
 ; properties. When you increase the configuration for gradual
 ; verification to the final setting, ACL2s will require proofs. You
-; can (and should) prove lemmas as needed. 
+; can (and should) prove lemmas as needed.
 
 ; Q3c
-(property ...)
-(property ...)
-(property ...)
+; Property 1: Measure of b is less than (if a b c) when a is atomic
+(property (a :if-atom b c :if-expr)
+          (l< (m-if-flat b) 
+              (m-if-flat `(if ,a ,b ,c))))
+
+; Property 2: Measure of c is less than (if a b c) when a is atomic
+(property (a :if-atom b c :if-expr)
+          (l< (m-if-flat c)
+              (m-if-flat `(if ,a ,b ,c))))
+
+; Property 3: Transformation decreases measure
+(property (d e f b c :if-expr)
+          :hyps (if-exprp `(if ,d ,e ,f))
+          (l< (m-if-flat `(if ,d (if ,e ,b ,c) (if ,f ,b ,c)))
+              (m-if-flat `(if (if ,d ,e ,f) ,b ,c))))
 
 #|
  
@@ -320,9 +369,38 @@ Q3. Consider the following definitions.
 ; no nested inductions! Also, remember theorems are rewrite rules, so
 ; orient appropriately.
 
-(property if-flat-equal-if (...)
-  ...)
 
+; Lemma: The transformation (if (if d e f) b c) → (if d (if e b c) (if f b c))
+; preserves evaluation semantics as a pure boolean identity
+(property if-eval-transform (d e f b c :if-expr a :if-assign)
+          (equal (if (if-eval d a)
+                     (if-eval (list 'if e b c) a)
+                     (if-eval (list 'if f b c) a))
+                 (if-eval (list 'if (list 'if d e f) b c) a)))
+
+(property if-expr-structure (a b c :all)
+          :h (if-exprp (list 'if a b c))
+          (if-exprp a))
+
+; If e3 satisfies none of the if-expr constructors, then (if e3 ...) cannot be valid
+(property if-expr-component-must-be-valid (e3 :all e4 :all)
+          :hyps (and (not (booleanp e3))
+                     (not (varp e3))
+                     (not (consp e3))
+                     (consp e4)
+                     (consp (cdr e4))
+                     (not (cddr e4)))
+          (not (if-exprp (list* 'if e3 e4))))
+
+; An if-expr component must be an if-atom or a cons
+(property if-expr-component-type (e3 :all b c :if-expr)
+          :hyps (if-exprp (list 'if e3 b c))
+          (or (if-atomp e3) (consp e3)))
+
+; Main theorem: if-flat preserves semantics
+(property if-flat-equal-if (e :if-expr a :if-assign)
+          (equal (if-eval (if-flat e) a)
+                 (if-eval e a)))
 #|
 
  Check-validp is a simple validity checker for if-expr's.  The idea is
@@ -331,7 +409,7 @@ Q3. Consider the following definitions.
  get to a variable that is not assigned, we check that the expression
  is a validity when the variable is t and when it is nil.
 
-|# 
+|#
 
 ; Lookup assoc-equal in the documentation.
 (definec assignedp (e :if-atom a :if-assign) :bool
@@ -358,21 +436,79 @@ Q3. Consider the following definitions.
 ; (check-validp e) = t, then evaluating e under a, an arbitrary
 ; if-assign, results in t.
 
-(property check-validp-is-sound ...
-  ...)
+(definec assignment-extends (a2 :if-assign a1 :if-assign) :bool
+  (or (endp a1)
+      (and (equal (lookup-var (caar a1) a2)
+                  (lookup-var (caar a1) a1))
+           (assignment-extends a2 (cdr a1)))))
 
+(property assignment-extends-nil (a2 :if-assign)
+  (assignment-extends a2 nil))
+
+(property lookup-var-preserved-under-extension
+          (v :var a1 :if-assign a2 :if-assign)
+          :hyps (and (assignment-extends a2 a1)
+                     (assoc-equal v a1))
+          (equal (lookup-var v a2)
+                 (lookup-var v a1))
+          :hints (("Goal" :induct (assignment-extends a2 a1))))
+
+
+(property validp-sound-general
+  (e :norm-if-expr a1 :if-assign a2 :if-assign)
+  :hyps (and (validp e a1)
+             (assignment-extends a2 a1))
+  (equal (if-eval e a2) t)
+  :hints (("Goal"
+           :induct (validp e a1)
+           :in-theory
+           (e/d (validp if-eval assignment-extends)
+                (validp-induction-scheme
+                 if-eval if-eval-induction-scheme
+                 lookup-var lookup-var-induction-scheme
+                 assignment-extends-induction-scheme)))))
+
+(property validp-sound-nil (e :norm-if-expr a :if-assign)
+  :hyps (validp e nil)
+  (equal (if-eval e a) t)
+  :hints (("Goal"
+           :use ((:instance validp-sound-general (a1 nil) (a2 a)))
+           :in-theory (enable assignment-extends))))
+
+(property check-validp-sound-on-flat (e :if-expr a :if-assign)
+  :hyps (check-validp e)
+  (equal (if-eval (if-flat e) a) t)
+  :hints (("Goal"
+           :use ((:instance validp-sound-nil (e (if-flat e)) (a a))))))
+
+(property check-validp-is-sound (e :if-expr a :if-assign)
+  :hyps (check-validp e)
+  (equal (if-eval e a) t)
+  :hints (("Goal"
+           :use (check-validp-sound-on-flat
+                 if-flat-equal-if))))
 ; Configuration: update as per instructions
 (modeling-start)
 
 
 ; Q3f
-; 
+;
 ; Prove that check-validp is complete by showing that when
 ; check-validp returns nil, there is some if-assign under which the
 ; if-expr evaluates to nil. With this proof, we now know that
 ; check-validp is a decision procedure for PL validity.
 
-...
+(property check-validp-is-complete
+  (e :if-expr)
+  :hyps (not (check-validp e))
+  (let ((a (cex (if-flat e) nil)))
+    (equal (if-eval e a) nil))
+  :hints (("Goal"
+           :use ((:instance validp-complete-general
+                            (e (if-flat e)) (a1 nil))
+                 (:instance if-flat-equal-if (e e) (a (cex (if-flat e) nil))))
+           :in-theory (e/d (check-validp) ()))))
+
 
 #|
 
@@ -431,6 +567,26 @@ Q3. Consider the following definitions.
  plan and use the professional method to sketch out a proof.
 
 |#
+
+(definec orderedp (xs :tl) :bool
+  (match xs
+         (() t)
+         ((a) t)
+         ((a b . rest)
+          (and (<<= a b)
+               (orderedp (cons b rest))))))
+
+(definec count (a :all xs :tl) :nat
+  (match xs
+         (() 0)
+         ((e . es)
+          (+ (if (== a e) 1 0)
+             (count a es)))))
+
+(definec samebag (xs ys :tl) :bool
+  (forall (a) (== (count a xs) (count a ys))))
+
+
 
 (property qsort=isort (x :tl)
   (== (qsort x)
