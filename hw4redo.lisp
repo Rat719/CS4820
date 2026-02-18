@@ -99,8 +99,22 @@
              (rev x)
              (app (rev x) y)))))
 
+; lets use the measure function in the function:
+
+(definec bad-app (x y acc :tl) :tl
+  (declare (xargs :measure (m-bad-app x y acc)))
+  (match (list x y)
+         ((nil nil) acc)
+         ((& nil) (bad-app y x acc))
+         ((nil (f . r)) (bad-app x r (cons f acc)))
+         (& (bad-app x nil (bad-app acc nil y)))))
+
+
+
 
 (ubt! 1)
+
+; Q2
 
 (definec ack (n m :nat) :pos
   :skip-tests t ; ack is slow, so skip testing
@@ -133,6 +147,16 @@
                         (not (zp m)))
                    (l< (m-ack (1- n) (ack n (1- m)))
                        (m-ack n m))))
+
+; Lets use the measure function we made in ack
+(definec ack (n m :nat) :pos
+  :skip-tests t
+  (declare (xargs :measure (m-ack n m)))
+  (match (list n m)
+         ((0 &) (1+ m))
+         ((& 0) (ack (1- n) 1))
+         (& (ack (1- n) (ack n (1- m))))))
+
 
 (ubt! 1)
 
