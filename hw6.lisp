@@ -1030,60 +1030,153 @@ Is the above set of constraints consistent? If so, who has what job?
 (time (solve-sudoku-alternate *hardest-sudoku-board-alternate*))
 (z3::get-solver-stats)
 
-#|
-The bit-blasting encoding significantly outperformed the enum encoding
-on the Al Escargot puzzle. The bit-blasting solver required only 12
-conflicts and 24 decisions, while the enum encoding required 1,688
-conflicts and 16,095 decisions — roughly 100x more search effort.
 
-This is because the bit-blasting encoding allows Z3's boolean
-propagation engine to work very efficiently. Each cell is represented
-by 9 boolean variables, and the "at-least-one/at-most-one" constraints
-allow unit propagation to immediately eliminate many possibilities when
-a value is assigned. This dramatically prunes the search space early.
+;; EXTRA CREDIT #2 
+;; unruly is NP-hard but it is easy to encode hehe
+;; basically encode it like we encode sudoku
+;; 8x8 board
+;; then we only have black or white so i encode black as 1 and white as 2
+;; then we encode constraints: each row or col must have 4 black and 4 white
+;; and no consecutive 3 for black or white is even easier, we literally start
+;; counting one by one until there is not enough items on the same row (like col 6)
+;; finally we encode the board and boom it is done
+;; i don't want to write too many examples so one example you can just have everything
+;; as empty so we start with an empty board
+;; second instance we can have an obviously unsat board with consecutive 3 white or black
+;; for a working example, see the board i supplied as example, it is taken from the website
+;; so it definitely works and our solution gives an answer
+;; chatgpt usage about 10 percent
 
-The enum encoding, while having fewer variables (81 vs 729), forces Z3
-to use its datatype theory solver. The enum theory solver is more expensive
-per inference than pure boolean propagation, leading to many more
-conflicts and restarts before finding the solution.
 
-#|
+(defun unruly-cell-var (row col val)
+  (intern (concatenate 'string "X" (write-to-string (+ col (* row 8))) "_" (write-to-string val))))
 
-;; ==========================
-;;       Extra Credit
-;; ==========================
-;; 25pts each
+(defun get-unruly-value (soln row col)
+    (cond
+      ((cadr (assoc-equal (unruly-cell-var row col 1) soln)) 1)
+      ((cadr (assoc-equal (unruly-cell-var row col 2) soln)) 2)
+      (t '_)))
 
-;; ==========================
-;;            E1
-;; ==========================
-;;
-;; Extend your Sudoku solver to support arbitrary-size Sudoku
-;; puzzles. For n>3, the input and output of your solver should still
-;; be numeric (as opposed to e.g. taking in and returning symbols that
-;; somehow encode numeric values for cell values greater than 9).
+(defun pretty-print-unruly (soln)
+  (loop for row below 8 do
+      (progn
+          (terpri)
+          (loop for col below 8 do
+              (format t "~A " (get-unruly-value soln row col))))))
 
-;; ==========================
-;;            E2
-;; ==========================
-;;
-;; Develop a solver for another logic puzzle by encoding it as
-;; Z3 assertions using the Lisp-Z3 interface.
-;; Any of the logic puzzles here are allowed:
-;; https://www.chiark.greenend.org.uk/~sgtatham/puzzles/
-;; Any puzzle that is NP-hard is OK.
-;;
-;; You should provide a short description of the selected logic puzzle
-;; and the input encoding you use, as well as a few (2-3) example
-;; instances of your chosen puzzle encoded using your input encoding.
+(defun unruly-cell-vars (row col)
+  (loop for val from 1 to 2
+      collect (unruly-cell-var row col val)))
 
-;; ==========================
-;;            E3
-;; ==========================
-;;
-;; Develop your own solver for arbitrary-size Sudoku puzzles.  Try to
-;; beat the Z3 version you wrote. There are a lot of Sudoku-specific
-;; reasoning shortcuts you can use and you should think carefully
-;; about how to manage search. Compare your solver with the Z3 version
-;; on a number of interesting examples.
 
+(defconstant *unruly-example-board*
+  '(_ _ _ _  _ _ _ 1
+    1 _ 1 2  _ 2 _ 1
+    _ _ _ 2  _ 2 _ _ 
+    _ _ _ _  _ _ _ 2
+    1 1 _ _  _ _ _ _ 
+    1 _ 2 _  _ 1 _ _
+    _ _ _ _  _ _ 1 _ 
+    _ 2 _ _  _ _ 2 _
+  ))
+
+(defun unruly-exactly-one (vars)
+  `(and ((_ at-least 1) ,@vars)
+        ((_ at-most 1) ,@vars)))
+
+(defun unruly-exactly-four (vars)
+  `(and ((_ at-least 4) ,@vars)
+        ((_ at-most 4) ,@vars)))
+
+
+;; each cell in unruly can only have 1 or 2
+(defun unruly-cell-constraints ()
+  (cons 'and
+          (loop for row below 8 append
+            (loop for col below 8
+              collect (unruly-exactly-one
+                        (unruly-cell-vars row col))))))
+
+
+;; each row in unruly must have 4 1s and 4 2s
+(defun unruly-row-value-vars (row val)
+  (loop for col below 8
+      collect (unruly-cell-var row col val)))
+
+(defun unruly-row-constraints ()
+  (cons 'and
+    (loop for row below 8 append
+      (loop for val from 1 to 2
+        collect (unruly-exactly-four
+                  (unruly-row-value-vars row val))))))
+
+
+(defun unruly-col-value-vars (col val)
+  (loop for row below 8
+    collect (unruly-cell-var row col val)))
+
+(defun unruly-col-constraints ()
+  (cons 'and
+      (loop for col below 8 append
+        (loop for val from 1 to 2
+            collect (unruly-exactly-four
+                      (unruly-col-value-vars col val))))))
+
+;; for consecutive 3s, row 0 to 5 cannot have consecutive
+(defun consecutive-row-constraints ()
+  (cons 'and
+      (loop for row below 8 append
+        (loop for col from 0 to 5 append
+            (list
+                `(not (and ,(unruly-cell-var row col 1)
+                           ,(unruly-cell-var row (+ col 1) 1)
+                           ,(unruly-cell-var row (+ col 2) 1)))
+                `(not (and ,(unruly-cell-var row col 2)
+                           ,(unruly-cell-var row (+ col 1) 2)
+                           ,(unruly-cell-var row (+ col 2) 2))))))))
+
+(defun consecutive-col-constraints ()
+  (cons 'and
+      (loop for col below 8 append
+        (loop for row from 0 to 5 append
+            (list
+                `(not (and ,(unruly-cell-var row col 1)
+                           ,(unruly-cell-var (+ row 1) col 1)
+                           ,(unruly-cell-var (+ row 2) col 1)))
+                `(not (and ,(unruly-cell-var row col 2)
+                           ,(unruly-cell-var (+ row 1) col 2)
+                           ,(unruly-cell-var (+ row 2) col 2))))))))
+
+(defun unruly-starting-board-constraints (input-grid)
+    (cons 'and
+        (loop for entry in input-grid
+              for idx from 0
+              unless (equal entry '_)
+                collect (unruly-cell-var (floor idx 8)
+                                         (mod idx 8)
+                                         entry))))
+
+(defun unruly-var-specs ()
+  (loop for row below 8 append 
+    (loop for col below 8 append
+      (loop for val from 1 to 2 append
+        `(,(unruly-cell-var row col val) :bool)))))
+
+(defun solve-unruly (input-grid)
+  (let ((var-specs (unruly-var-specs)))
+      (solver-push)
+      (z3-assert-fn var-specs (unruly-cell-constraints))
+      (z3-assert-fn var-specs (unruly-row-constraints))
+      (z3-assert-fn var-specs (unruly-col-constraints))
+      (z3-assert-fn var-specs (consecutive-row-constraints))
+      (z3-assert-fn var-specs (consecutive-col-constraints))
+      (z3-assert-fn var-specs (unruly-starting-board-constraints input-grid))
+        (let ((res (check-sat)))
+            (prog1 
+                (if (member res '(SAT :SAT sat :sat))
+                    (get-model-as-assignment)
+                    'UNSAT)
+                  (solver-pop)))))
+
+
+(pretty-print-unruly (time (solve-unruly *unruly-example-board*)))
