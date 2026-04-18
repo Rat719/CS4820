@@ -919,8 +919,6 @@ does not get simplified because
     (if (oddp nil-count)
         (fo-simplify `(not ,base))
         base)))
- 
-;; =========================================================================
 ;; Tests for Q1
 ;; =========================================================================
  
@@ -1690,7 +1688,6 @@ does not get simplified because
 
 
 |#
-;; -------------------------------------------------------------------------
 ;; Clause data structure: (:pos <atoms> :neg <atoms>)
 ;; -------------------------------------------------------------------------
 
@@ -1713,7 +1710,6 @@ does not get simplified because
 (defun clause-literal-count (c)
   (+ (len (clause-pos c)) (len (clause-neg c))))
 
-;; -------------------------------------------------------------------------
 ;; Clausification: full formula -> list of clauses
 ;; -------------------------------------------------------------------------
 
@@ -1750,7 +1746,6 @@ does not get simplified because
                   skn)))
     (remove-if #'clause-tautology-p (clausify-matrix mtx))))
 
-;; -------------------------------------------------------------------------
 ;; Variable renaming for fresh clause copies
 ;; -------------------------------------------------------------------------
 
@@ -1781,8 +1776,7 @@ does not get simplified because
      (mapcar (lambda (a) (apply-subst-term a subst)) (clause-pos c))
      (mapcar (lambda (a) (apply-subst-term a subst)) (clause-neg c)))))
 
-;; -------------------------------------------------------------------------
-;; Applying a substitution to a clause (used post-resolution)
+;; Applying a substitution to a clause
 ;; -------------------------------------------------------------------------
 
 (defun apply-subst-clause (c subst)
@@ -1797,13 +1791,7 @@ does not get simplified because
   (make-clause (dedup-atoms (clause-pos c))
                (dedup-atoms (clause-neg c))))
 
-;; -------------------------------------------------------------------------
 ;; Positive resolution
-;;
-;; Given two clauses, at least one of which is positive (all :pos, no :neg),
-;; produce all resolvents.  For each pos literal L1 in the positive parent
-;; and each neg literal L2 in the other, attempt mgu(L1, L2); if it
-;; succeeds, the resolvent drops both and substitutes.
 ;; -------------------------------------------------------------------------
 
 (defun resolve-on (pos-parent mix-parent l1 l2)
@@ -1844,11 +1832,7 @@ does not get simplified because
        (positive-resolvents-oriented r2 r1))
       (t nil))))
 
-;; -------------------------------------------------------------------------
 ;; Factoring
-;;
-;; Within a single clause, unify two same-sign literals; drop the
-;; duplicate and apply the mgu.  Produce all single-step factors.
 ;; -------------------------------------------------------------------------
 
 (defun factor-same-sign (atoms sign-accessor other-accessor c)
@@ -1879,10 +1863,7 @@ does not get simplified because
      (factor-same-sign nil #'clause-pos #'clause-neg rc)
      (factor-same-sign nil #'clause-neg #'clause-pos rc))))
 
-;; -------------------------------------------------------------------------
-;; Matching: one-way substitution.  match-term(pattern, ground, sigma)
-;; returns extended sigma or 'fail.  Unlike unify, only variables in the
-;; pattern can bind; the "ground" side is treated as opaque.
+;; Matching: one-way substitution
 ;; -------------------------------------------------------------------------
 
 (defun match-term (pat tm subst)
@@ -1911,10 +1892,7 @@ does not get simplified because
          (if (equal s 'fail) 'fail
              (match-terms (cdr ps) (cdr ts) s))))))
 
-;; -------------------------------------------------------------------------
-;; Clause subsumption: C1 subsumes C2 iff exists sigma with C1.sigma ⊆ C2.
-;; Backtracking search: try to match each literal of C1 to some literal
-;; of C2 (same sign), extending sigma.
+;; Clause subsumption
 ;; -------------------------------------------------------------------------
 
 (defun match-literals-backtrack (c1-lits c2-lits subst)
@@ -1945,8 +1923,7 @@ does not get simplified because
                                                  (clause-neg c2) s1)))
                (not (equal s2 'fail)))))))
 
-;; -------------------------------------------------------------------------
-;; Replacement: forward and backward subsumption when adding a clause.
+;; Replacement
 ;; -------------------------------------------------------------------------
 
 (defun any-subsumes (c clauses)
@@ -1963,8 +1940,7 @@ does not get simplified because
     ((any-subsumes c clauses) :redundant)
     (t (cons c (remove-subsumed-by c clauses)))))
 
-;; -------------------------------------------------------------------------
-;; Saturation loop (given-clause algorithm)
+;; Saturation loop
 ;; -------------------------------------------------------------------------
 
 (defparameter *fo-val-iter-cap* 2000
@@ -2018,7 +1994,6 @@ does not get simplified because
                        (setf unprocessed r2)))))))))))
     'unknown))
 
-;; -------------------------------------------------------------------------
 ;; Main entry point
 ;; -------------------------------------------------------------------------
 
@@ -2155,9 +2130,7 @@ does not get simplified because
 
   (format t "~%-----~%~a passed, ~a failed~%" *test-passes* *test-fails*))
 
-;; =========================================================================
-;; Q5 Part 2 tests: saturation on propositional and FO validities,
-;; then the four Harrison textbook exercises.
+;; Q5 Part 2 tests:
 ;; =========================================================================
 
 (defun test-val (name input expected)
@@ -2185,8 +2158,7 @@ does not get simplified because
            (format t "FAIL ~a   [~a ms]~%  input:    ~s~%  expected: ~s~%  got:      ~s~%"
                    name ms input expected actual)))))
 
-;; -------------------------------------------------------------------------
-;; Harrison textbook formulas (from p.178-198 of the Handbook)
+;; textbook formulas (from p.178-198 of the Handbook)
 ;; -------------------------------------------------------------------------
 
 (defparameter *p34*
@@ -2228,9 +2200,7 @@ does not get simplified because
     (or (forall (x y) (p x y))
         (forall (x y) (q x y)))))
 
-;; -------------------------------------------------------------------------
-;; Core tests: propositional and simple FO validities/non-validities.
-;; Run first with default iteration cap - these should all be fast.
+;; tests: propositional and simple FO validities/non-validities.
 ;; -------------------------------------------------------------------------
 
 (defun run-val-tests ()
@@ -2249,7 +2219,6 @@ does not get simplified because
                       (implies (p) (r)))
             'valid)
 
-  ;; Propositional non-validity -> should saturate without deriving []
   (test-val "4 p does not imply q"
             '(implies (p) (q)) 'saturated)
 
@@ -2270,13 +2239,12 @@ does not get simplified because
                       (forall y (exists x (p x y))))
             'valid)
 
-  ;; Drinker's paradox (classic; one-step refutation after unification)
+  ;; Drinker's paradox
   (test-val "9 drinker's paradox"
             '(exists x (implies (p x) (forall y (p y))))
             'valid)
 
-  ;; Barber of Seville (L19 slide barb formula).  Note: use variable
-  ;; name 'v' not 'b' - 'b' isn't valid in the assignment's grammar.
+  ;; Barber of Seville (L19 slide barb formula).
   (test-val "10 barber - no such barber"
             '(not (exists v (forall x (iff (shaves v x)
                                            (not (shaves x x))))))
@@ -2284,10 +2252,7 @@ does not get simplified because
 
   (format t "~%-----~%~a passed, ~a failed~%" *test-passes* *test-fails*))
 
-;; -------------------------------------------------------------------------
-;; Textbook tests: Harrison p34/p38/ewd1062/Los.  These are HARD.
-;; Run separately with a large iteration cap.  Los is the best match
-;; for positive resolution; the others may hit the cap.
+;; Textbook tests: Harrison p34/p38/ewd1062/Los.
 ;; -------------------------------------------------------------------------
 
 (defun run-textbook-tests ()
@@ -2300,9 +2265,6 @@ does not get simplified because
     (test-val-timed "p34 (Andrews' Challenge)"      *p34*     'valid))
   (format t "~%-----~%~a passed, ~a failed~%" *test-passes* *test-fails*))
 
-;; -------------------------------------------------------------------------
-;; Convenience: run everything at once with a reasonable cap.
-;; -------------------------------------------------------------------------
 
 (defun run-all-val-tests ()
   (format t "~%=== Core tests ===~%")
