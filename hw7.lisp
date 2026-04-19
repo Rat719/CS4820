@@ -12,9 +12,8 @@
  the subject of your email submission is "CS 4820 HWK 7".
 
  The group members are:
+Wangyuan Zheng and CHristopher Wright-Williams
 
- ... (put the names of the group members here)
- 
  To make sure that we are all on the same page, build the latest
  version of ACL2s, as per HWK1. You are going to be using SBCL, which
  you already have, due to the build process in
