@@ -178,6 +178,70 @@
     (format t "~%-- ~a-bit --~%" n)
     (time (dpll cnf))))
 
+;; p(i,j) means pigeon i is in hole j
+;; Variable naming: (pigeon i j) for pigeon i in hole j
+
+(defun ph-var (i j)
+  ;; atom representing "pigeon i is in hole j"
+  `(pigeon ,i ,j))
+
+(defun ph-at-least-one (i n)
+  ;; pigeon i must be in at least one hole
+  ;; (or (pigeon i 1) (pigeon i 2) ... (pigeon i n))
+  (mapcar (lambda (j) (ph-var i j))
+          (loop for j from 1 to n collect j)))
+
+(defun ph-at-most-one (i j1 j2)
+  ;; pigeon i cannot be in both hole j1 and hole j2
+  ;; (or (not (pigeon i j1)) (not (pigeon i j2)))
+  (list `(not ,(ph-var i j1))
+        `(not ,(ph-var i j2))))
+
+(defun ph-no-conflict (n)
+  ;; no two pigeons in the same hole
+  ;; for each hole j, for each pair of pigeons i1 < i2:
+  ;; (or (not (pigeon i1 j)) (not (pigeon i2 j)))
+  (let ((clauses nil))
+    (loop for j from 1 to n do
+      (loop for i1 from 1 to (1+ n) do
+        (loop for i2 from (1+ i1) to (1+ n) do
+          (push (list `(not ,(ph-var i1 j))
+                      `(not ,(ph-var i2 j)))
+                clauses))))
+    clauses))
+
+(defun pigeonhole-cnf (n)
+  ;; n holes, n+1 pigeons
+  ;; Returns CNF as list of clauses
+  (let ((clauses nil))
+    ;; each pigeon in at least one hole
+    (loop for i from 1 to (1+ n) do
+      (push (ph-at-least-one i n) clauses))
+    ;; no two pigeons share a hole
+    (setf clauses (append clauses (ph-no-conflict n)))
+    clauses))
+
+
+(format t "~%=== BENCHMARK: Pigeonhole (always UNSAT) ===~%")
+
+(format t "~%-- 3 holes, 4 pigeons --~%")
+(time (dp-aux (pigeonhole-cnf 3)))
+
+(format t "~%-- 4 holes, 5 pigeons --~%")
+(time (dp-aux (pigeonhole-cnf 4)))
+
+(format t "~%-- 5 holes, 6 pigeons --~%")
+(time (dp-aux (pigeonhole-cnf 5)))
+
+(format t "~%-- 3 holes, 4 pigeons --~%")
+(time (dpll-aux (pigeonhole-cnf 3)))
+
+(format t "~%-- 4 holes, 5 pigeons --~%")
+(time (dpll-aux (pigeonhole-cnf 4)))
+
+(format t "~%-- 5 holes, 6 pigeons --~%")
+(time (dpll-aux (pigeonhole-cnf 5)))
+
 #| Tie-break at n=16: (time (dpll (tseitin (make-cec 16)))) |#
 
 ;;;; ── Grading summary ─────────────────────────────────────────────────────
@@ -196,3 +260,5 @@
 
  TOTAL: ___/130   w/EC: ___/170
 |#
+
+
